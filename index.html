@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Webgl Balls</title>
+
+    <script id="vertex-shader-grid" type="x-shader/x-vertex">#version 300 es
+        layout(location = 0) in vec2 a_pos;
+        uniform vec2 viewport;
+        void main(){
+            gl_Position = vec4(2.0*a_pos.x/viewport.x-1.0, 1.0-2.0*a_pos.y/viewport.y, 0.0, 1.0);
+        }
+    </script>
+    <script id="fragment-shader-grid" type="x-shader/x-fragment">#version 300 es
+        precision mediump float;
+        out vec4 fragColor;
+        void main(){
+            fragColor = vec4(1);
+        }
+    </script>
+
+    <script id="vertex-shader" type="x-shader/x-vertex">#version 300 es
+        layout(location = 0) in vec2 a_pos;
+        layout(location = 1) in vec2 a_uv;
+        layout(location = 2) in float a_r;
+        layout(location = 3) in vec3 a_color;
+        layout(location = 4) in vec2 a_offset;
+        
+        uniform vec2 viewport;
+        out vec2 uv;
+        out vec3 color;
+
+        void main(){
+            uv = a_uv;
+            color = a_color;
+            gl_Position = vec4(2.0*(a_pos.x*a_r+a_offset.x)/viewport.x-1.0, 1.0-2.0*(a_pos.y*a_r+a_offset.y)/viewport.y, 0.0, 1.0);
+        }
+    </script>
+    <script id="fragment-shader" type="x-shader/x-fragment">#version 300 es
+        precision mediump float;
+        in vec2 uv;
+        in vec3 color;
+        out vec4 fragColor;
+        void main(){
+            vec2 c = vec2(0.5, 0.5);
+            float d = (uv.x-c.x)*(uv.x-c.x)+(uv.y-c.y)*(uv.y-c.y);
+            if(d > 0.25)
+                discard;
+            fragColor = vec4(color, 1);
+        }
+    </script>
+
+    <script>
+
+        function randrange(min, max) {
+            return min + Math.random() * (max - min);
+        }
+
+        class Ball {
+            constructor(x, y, r) {
+                this.x = x;
+                this.y = y;
+                this.oldx = x;
+                this.oldy = y;
+                this.r = r;
+            }
+        }
+
+        class Rectangle {
+            constructor(x, y, w, h) {
+                this.x = x;
+                this.y = y;
+                this.w = w;
+                this.h = h;
+                this.balls = [];
+            }
+
+            isBallInside(b) {
+                return !(b.x + b.r < this.x || b.x - b.r > this.x + this.w || b.y + b.r < this.y || b.y - b.r > this.y + this.h);
+            }
+
+            addBall(b) {
+                this.balls.push(b);
+            }
+
+            collideBalls(overlap) {
+                for (let i = 0; i < this.balls.length; i++) {
+                    for (let j = i + 1; j < this.balls.length; j++) {
+                        let b1 = this.balls[i];
+                        let b2 = this.balls[j];
+                        var dd = (b2.x - b1.x) * (b2.x - b1.x) + (b2.y - b1.y) * (b2.y - b1.y);
+                        let r = b1.r + b2.r;
+                        if (dd == 0) {
+                            let diffx = randrange(0.0, 0.1);
+                            let diffy = randrange(0.0, 0.1);
+                            b1.x -= diffx;
+                            b1.y -= diffy;
+                            b2.x += diffx;
+                            b2.y += diffy;
+
+                        } else if (dd < r * r) {
+                            let d = Math.sqrt(dd);
+                            let coef = (1.0 - overlap) * (r - d) / 2.0;
+                            let diffx = coef * (b2.x - b1.x) / d;
+                            let diffy = coef * (b2.y - b1.y) / d;
+                            b1.x -= diffx;
+                            b1.y -= diffy;
+                            b2.x += diffx;
+                            b2.y += diffy;
+                        }
+                    }
+                }
+            }
+        }
+
+        class Grid {
+            constructor(x, y, w, h, cellSize) {
+                this.rects = [];
+                this.x = x;
+                this.y = y;
+                this.nx = Math.ceil(w / cellSize);
+                this.ny = Math.ceil(h / cellSize);
+                for (let i = 0; i < this.nx; i++) {
+                    for (let j = 0; j < this.ny; j++) {
+                        let r = new Rectangle(x + i * cellSize, y + j * cellSize, cellSize, cellSize);
+                        this.rects.push(r);
+                    }
+                }
+            }
+            pushBall(b) {
+                this.rects.forEach(r => {
+                    if (r.isBallInside(b))
+                        r.addBall(b);
+                });
+            }
+            collideBalls(overlap) {
+                this.rects.forEach(r => {
+                    r.collideBalls(overlap);
+                });
+            }
+        }
+
+        function createShader(gl, type, source) {
+            var shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            var success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
+            if (success)
+                return shader;
+            console.log(gl.getShaderInfoLog(shader));
+            gl.deleteShader(shader);
+        }
+
+        function createProgram(gl, vertexShader, fragmentShader) {
+            var program = gl.createProgram();
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmentShader);
+            gl.linkProgram(program);
+            var success = gl.getProgramParameter(program, gl.LINK_STATUS);
+            if (success)
+                return program;
+            console.log(gl.getProgramInfoLog(program));
+            gl.deleteProgram(program);
+        }
+
+        function main() {
+            // setup canvas
+            const canvas = document.querySelector("#glCanvas");
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            // setup gl context
+            const gl = canvas.getContext("webgl2");
+            if (!gl) {
+                alert("Can't initialize WebGL2.");
+                return;
+            }
+
+            // viewport size in pixels
+            var viewport = new Float32Array(2);
+            viewport[0] = canvas.width;
+            viewport[1] = canvas.height;
+
+            // gl setup
+            gl.enable(gl.DEPTH_TEST);
+            gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+            // setup ball shader program
+            var vertexShaderSource = document.querySelector("#vertex-shader").text;
+            var fragmentShaderSource = document.querySelector("#fragment-shader").text;
+            var vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+            var fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+            var program = createProgram(gl, vertexShader, fragmentShader);
+            var viewportUniformLoc = gl.getUniformLocation(program, "viewport");
+
+            // setup grid shader program
+            var gridVertexShaderSource = document.querySelector("#vertex-shader-grid").text;
+            var gridFragmentShaderSource = document.querySelector("#fragment-shader-grid").text;
+            var gridVertexShader = createShader(gl, gl.VERTEX_SHADER, gridVertexShaderSource);
+            var gridFragmentShader = createShader(gl, gl.FRAGMENT_SHADER, gridFragmentShaderSource);
+            var gridProgram = createProgram(gl, gridVertexShader, gridFragmentShader);
+            var gridViewportUniformLoc = gl.getUniformLocation(gridProgram, "viewport");
+
+            // setup grid buffer
+            var gridvao = gl.createVertexArray();
+            gl.bindVertexArray(gridvao);
+            var gridvbo = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, gridvbo);
+            gl.enableVertexAttribArray(0);
+            gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+            // setup base quad model
+            var bx = canvas.width / 2;
+            var by = canvas.height / 2;
+
+            var quad = [
+                //pos  //uv
+                -1, 1, 0, 0,
+                1, 1, 1, 0,
+                1, -1, 1, 1,
+                1, -1, 1, 1,
+                -1, -1, 0, 1,
+                -1, 1, 0, 0
+            ];
+
+            var quadVAO = gl.createVertexArray();
+            gl.bindVertexArray(quadVAO);
+
+            var quadVBO = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, quadVBO);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(quad), gl.STATIC_DRAW);
+            // pos
+            gl.enableVertexAttribArray(0);
+            gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 4 * Float32Array.BYTES_PER_ELEMENT, 0);
+            // uv
+            gl.enableVertexAttribArray(1);
+            gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 4 * Float32Array.BYTES_PER_ELEMENT, 2 * Float32Array.BYTES_PER_ELEMENT);
+
+            const numQuadVerts = 6;
+
+            // number of balls and min/max radius from get parametters
+            const queryString = window.location.search;
+            const urlParams = new URLSearchParams(queryString);
+
+            var form = document.querySelector("#opt");
+
+            var numBalls, minr, maxr, substep;
+
+            if (urlParams.has('n')) {
+                numBalls = Number.parseInt(urlParams.get('n'));
+                if (isNaN(numBalls))
+                    numBalls = 2000;
+            } else numBalls = 2000;
+            form.querySelector('input[name="n"]').value = numBalls.toString();
+            if (urlParams.has('minr')) {
+                minr = Number.parseFloat(urlParams.get('minr'));
+                if (isNaN(minr))
+                    minr = 4.0;
+            } else minr = 4.0;
+            form.querySelector('input[name="minr"]').value = minr.toString();
+            if (urlParams.has('maxr')) {
+                maxr = Number.parseFloat(urlParams.get('maxr'));
+                if (isNaN(maxr))
+                    maxr = 12.0;
+            } else maxr = 12.0;
+            form.querySelector('input[name="maxr"]').value = maxr.toString();
+            if (urlParams.has('substep')) {
+                substep = Number.parseInt(urlParams.get('substep'));
+                if (isNaN(substep))
+                    substep = 3;
+            } else substep = 3;
+            form.querySelector('input[name="substep"]').value = substep.toString();
+
+            const hideGrid = !urlParams.has('showgrid');
+            form.querySelector('input[name="showgrid"]').checked = !hideGrid;
+            const cellSize = urlParams.has('cellsize') ? Number.parseInt(urlParams.get('cellsize')) : 100;
+
+            // setup intances data
+            const radiusData = new Float32Array(numBalls); // static
+            const colorData = new Float32Array(numBalls * 3); // static
+
+            const offsetData = new Float32Array(numBalls * 2); // dynamic 
+
+            // creating balls and fill instances data
+            var balls = [];
+            for (let i = 0; i < numBalls; i++) {
+                // create ball
+                let r = randrange(minr, maxr);
+                let x = randrange(r, canvas.width - r);
+                let y = randrange(r, canvas.height - r);
+                balls.push(new Ball(x, y, r));
+
+                // fill static data
+                radiusData[i] = r;
+                colorData[i * 3] = Math.random();
+                colorData[i * 3 + 1] = Math.random();
+                colorData[i * 3 + 2] = Math.random();
+            }
+
+            // create static instances buffers
+
+            // Radius
+            const radiusBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, radiusBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, radiusData, gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(2);
+            gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 0, 0); // 0,0 -> tightly packed array
+            gl.vertexAttribDivisor(2, 1); // 1 instance has 1 value on the location 2
+
+            // colors
+            const colorBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, colorData, gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(3);
+            gl.vertexAttribPointer(3, 3, gl.FLOAT, false, 0, 0);
+            gl.vertexAttribDivisor(3, 1);
+
+            // create dynamic instances buffer
+
+            const offsetBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, offsetBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, offsetData.byteLength, gl.DYNAMIC_DRAW); // just allocate the buffer
+            gl.enableVertexAttribArray(4);
+            gl.vertexAttribPointer(4, 2, gl.FLOAT, false, 0, 0);
+            gl.vertexAttribDivisor(4, 1);
+
+            // Simulation
+            const dt = 1.0 / 60.0;
+            const unit = 128.0;
+            const overlap = 0.4;
+            const drag = 0.1;
+            const bounce = 0.2;
+            const attractForce = 20;
+            var gravX = 0;
+            var gravY = 9.81;
+
+            // Mouse inputs
+            var attract = false;
+            var mouseX = 0;
+            var mouseY = 0;
+            canvas.addEventListener("mousedown", event => {
+                attract = true;
+                mouseX = event.pageX;
+                mouseY = event.pageY;
+            }, false);
+            canvas.addEventListener("mouseup", event => {
+                attract = false;
+                mouseX = event.pageX;
+                mouseY = event.pageY;
+            }, false);
+            canvas.addEventListener("mousemove", event => {
+                mouseX = event.pageX;
+                mouseY = event.pageY;
+            }, false);
+
+            var attractBalls = () => {
+                balls.forEach(b => {
+                    var dx = (mouseX - b.x);
+                    var dy = (mouseY - b.y);
+                    var d = Math.sqrt(dx * dx + dy * dy);
+                    if (d == 0)
+                        return;
+                    b.x += attractForce * unit * dt * dt * dx / (d * substep * substep);
+                    b.y += attractForce * unit * dt * dt * dy / (d * substep * substep);
+                });
+            };
+
+
+            window.onresize = () => {
+                // update canvas dims
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                // update clip space
+                gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+                // update viewport
+                viewport[0] = canvas.width;
+                viewport[1] = canvas.height;
+                // grid.setDim(canvas.width, canvas.height);
+            };
+
+            var renderBalls = () => {
+                // fill offsetDataBuffer
+                for (let i = 0; i < numBalls; i++) {
+                    let b = balls[i];
+                    offsetData[i * 2] = b.x;
+                    offsetData[i * 2 + 1] = b.y;
+                }
+
+                // set offsetBuffer
+                gl.bindBuffer(gl.ARRAY_BUFFER, offsetBuffer);
+                gl.bufferSubData(gl.ARRAY_BUFFER, 0, offsetData);
+
+                // render balls
+                gl.useProgram(program);
+                gl.uniform2fv(viewportUniformLoc, viewport)
+
+                gl.bindVertexArray(quadVAO);
+                gl.drawArraysInstanced(gl.TRIANGLES, 0, numQuadVerts, numBalls);
+            };
+
+            var renderGrid = (grid) => {
+                var gridVerts = new Float32Array((grid.nx + grid.ny) * 4 + 8)
+                for (let i = 0; i <= grid.nx; i++) {
+                    gridVerts[i * 4] = grid.x + i * cellSize;
+                    gridVerts[i * 4 + 1] = grid.y;
+                    gridVerts[i * 4 + 2] = grid.x + i * cellSize;
+                    gridVerts[i * 4 + 3] = grid.y + grid.ny * cellSize;
+                }
+                for (let i = 0; i <= grid.ny; i++) {
+                    gridVerts[grid.nx * 4 + 4 + i * 4] = grid.x;
+                    gridVerts[grid.nx * 4 + 4 + i * 4 + 1] = grid.y + i * cellSize;
+                    gridVerts[grid.nx * 4 + 4 + i * 4 + 2] = grid.x + grid.nx * cellSize;
+                    gridVerts[grid.nx * 4 + 4 + i * 4 + 3] = grid.y + i * cellSize;
+                }
+                gl.bindVertexArray(gridvao);
+                gl.bindBuffer(gl.ARRAY_BUFFER, gridvbo);
+                gl.bufferData(gl.ARRAY_BUFFER, gridVerts, gl.DYNAMIC_DRAW);
+                gl.useProgram(gridProgram);
+                gl.uniform2fv(gridViewportUniformLoc, viewport);
+                gl.drawArrays(gl.LINES, 0, (grid.nx + grid.ny) * 2 + 4);
+            };
+
+            var partition = () => {
+                var minx = canvas.width;
+                var miny = canvas.height;
+                var maxx = 0;
+                var maxy = 0;
+                balls.forEach(b => {
+                    if (b.x + b.r > maxx)
+                        maxx = b.x + b.r;
+                    if (b.x - b.r < minx)
+                        minx = b.x - b.r;
+                    if (b.y + b.r > maxy)
+                        maxy = b.y + b.r;
+                    if (b.y - b.r < miny)
+                        miny = b.y - b.r;
+                });
+                var grid = new Grid(minx, miny, maxx - minx, maxy - miny, cellSize);
+                balls.forEach(b => {
+                    grid.pushBall(b);
+                });
+                return grid;
+            };
+
+            var moveBalls = () => {
+                balls.forEach(b => {
+                    let tmpx = b.x;
+                    let tmpy = b.y;
+                    let vx = b.x - b.oldx;
+                    let vy = b.y - b.oldy;
+                    let v = Math.sqrt(vx * vx + vy * vy);
+                    b.x = 2 * b.x - b.oldx - vx * v * drag * dt / substep;
+                    b.y = 2 * b.y - b.oldy - vy * v * drag * dt / substep + gravY * dt * dt * unit / (substep * substep);
+                    b.oldx = tmpx;
+                    b.oldy = tmpy;
+                });
+            };
+
+            var collideWalls = () => {
+                balls.forEach(b => {
+
+                    let vx = (b.x - b.oldx);
+                    let vy = (b.y - b.oldy);
+
+                    if (b.x + b.r > canvas.width) {
+                        b.x = canvas.width - b.r;
+                        b.oldx = b.x + vx * bounce;
+                    } else if (b.x - b.r < 0) {
+                        b.x = b.r;
+                        b.oldx = b.x + vx * bounce;
+                    }
+                    if (b.y + b.r > canvas.height) {
+                        b.y = canvas.height - b.r;
+                        b.oldy = b.y + vy * bounce;
+                    } else if (b.y - b.r < 0) {
+                        b.y = b.r;
+                        b.oldy = b.y + vy * bounce;
+                    }
+
+                });
+            };
+
+            var fpsElem = document.querySelector("#fps");
+            var nbballsElem = document.querySelector("#nbballs");
+            nbballsElem.innerHTML = "BALLS: " + numBalls;
+
+            var startTime = new Date();
+            // main loop
+            var loop = () => {
+                var grid;
+                for (let i = 0; i < substep; i++) {
+                    if (attract)
+                        attractBalls();
+                    moveBalls();
+                    grid = partition();
+                    grid.collideBalls(overlap);
+                    collideWalls();
+                }
+                // RENDERING
+
+                // bg
+                gl.clearColor(0, 0, 0, 1);
+                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_COLOR_BIT);
+
+                // grid
+                if (!hideGrid)
+                    renderGrid(grid);
+                // balls
+                renderBalls();
+
+                // update fps
+                var endTime = new Date();
+                var delta = endTime - startTime;
+                fps.innerHTML = "FPS: " + Math.floor(1000.0 / delta);
+                startTime = new Date();
+
+                // loop
+                requestAnimationFrame(loop);
+
+            };
+            requestAnimationFrame(loop);
+        }
+    </script>
+
+    <style>
+        #opt {
+            text-align: right;
+            position: absolute;
+            top: 0;
+            right: 0;
+            z-index: 9999;
+            background-color: #282828;
+            padding: 12px 12px 12px 12px;
+            font-size: 16px;
+            font-family: 'Consolas';
+            border-radius: 0px 0px 8px 8px;
+        }
+
+        .intxt {
+            border-radius: 8px 8px 8px 8px;
+            font-family: 'Consolas';
+            font-size: 16px;
+            border: 1px solid black;
+            background-color: white;
+        }
+
+        input[type=submit] {
+            font-family: 'Consolas';
+            font-size: 16px;
+            width: 100%;
+            background-color: white;
+            border-radius: 8px 8px 8px 8px;
+            border: 1px solid black;
+        }
+
+        input[type=submit]:hover {
+            background-color: grey;
+        }
+
+        body {
+            color: white;
+            background-color: black;
+            font-family: 'Consolas';
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #fps {
+            position: absolute;
+            top: 0;
+            left: 0;
+            font-size: 28px;
+        }
+
+        #nbballs {
+            position: absolute;
+            top: 28px;
+            left: 0;
+            font-size: 28px;
+        }
+
+        .hint{
+            font-size: 11px;
+            color: #cecece;
+            position: absolute;
+            top: 64px;
+            left: 0;
+        }
+    </style>
+</head>
+
+<body onload="main()">
+    <canvas id="glCanvas"></canvas>
+    <div id="fps">FPS : </div>
+    <div id="nbballs">BALLS :</div>
+    <div class="hint">Download ? Just save the whole page !<br>Made by Pierre Jaffuer.</div>
+    <form action="" id="opt" method="get">
+        <label>Number of balls</label>
+        <input type="text" value="2000" name="n" class="intxt"><br>
+        <label>Minimum radius</label>
+        <input type="text" value="4" name="minr" class="intxt"> <br>
+        <label>Maximum radius</label>
+        <input type="text" value="10" name="maxr" class="intxt"> <br>
+        <label>Simulation substep</label>
+        <input type="text" value="3" name="substep" class="intxt"> <br>
+        <label>Show grid</label>
+        <input type="checkbox" name="showgrid" class="intxt"> <br>
+        <input type="submit" value="Submit"> <br>
+        
+    </form>
+</body>
+
+</html>
