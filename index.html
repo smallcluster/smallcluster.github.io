@@ -252,11 +252,11 @@
 
             if (urlParams.has('n')) {
                 numBalls = Number.parseInt(urlParams.get('n'));
-                if (isNaN(numBalls))
+                if (isNaN(numBalls) || numBalls <= 0)
                     numBalls = 2000;
             } else numBalls = 2000;
             form.querySelector('input[name="n"]').value = numBalls.toString();
-            if (urlParams.has('minr')) {
+            if (urlParams.has('minr') || minr <= 0) {
                 minr = Number.parseFloat(urlParams.get('minr'));
                 if (isNaN(minr))
                     minr = 4.0;
@@ -264,13 +264,13 @@
             form.querySelector('input[name="minr"]').value = minr.toString();
             if (urlParams.has('maxr')) {
                 maxr = Number.parseFloat(urlParams.get('maxr'));
-                if (isNaN(maxr))
+                if (isNaN(maxr) || maxr <= 0)
                     maxr = 12.0;
             } else maxr = 12.0;
             form.querySelector('input[name="maxr"]').value = maxr.toString();
             if (urlParams.has('substep')) {
                 substep = Number.parseInt(urlParams.get('substep'));
-                if (isNaN(substep))
+                if (isNaN(substep) || maxr <= 0)
                     substep = 3;
             } else substep = 3;
             form.querySelector('input[name="substep"]').value = substep.toString();
