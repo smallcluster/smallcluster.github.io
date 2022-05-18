@@ -338,26 +338,12 @@
             detectionRadiusLabel.innerText = defaultDetectionRadius;
         }
 
-        function resizeCanvas(){
-            const canvas = document.querySelector("#glCanvas");
-            const r = canvas.parentNode.getBoundingClientRect();
-            if (canvas.width != r.width){
-                canvas.width = r.width;
-                viewport[0] = canvas.width;
-            }
-            if (canvas.height != r.height){
-                canvas.height = r.height;
-                viewport[1] = canvas.height;
-            } 
-        }
-
         function registerGUIEvents() {
             // Simulation
             const resetButton = document.getElementById("resetButton");
             resetButton.onclick = function () { 
                 resetGUI(); 
                 resetSimulationParams(); 
-                resizeCanvas();
             };
             const replaceButton = document.getElementById("replaceButton");
             replaceButton.onclick = function () { replaceBoids(); resizeCanvas();};
@@ -367,21 +353,18 @@
             minSpeedSlider.oninput = function () {
                 minSpeed = this.value;
                 minSpeedLabel.innerText = this.value;
-                resizeCanvas();
             };
             const maxSpeedSlider = document.getElementById("maxSpeed");
             const maxSpeedLabel = document.getElementById("maxSpeedLabel");
             maxSpeedSlider.oninput = function () {
                 maxSpeed = this.value;
                 maxSpeedLabel.innerText = this.value;
-                resizeCanvas();
             };
             const maxSteerForceSlider = document.getElementById("maxSteerForce");
             const maxSteerForceLabel = document.getElementById("maxSteerForceLabel");
             maxSteerForceSlider.oninput = function () {
                 maxSteerForce = this.value;
                 maxSteerForceLabel.innerText = this.value;
-                resizeCanvas();
             };
             // Boids rules
             const alignWeightSlider = document.getElementById("alignWeight");
@@ -389,45 +372,44 @@
             alignWeightSlider.oninput = function () {
                 alignWeight = this.value;
                 alignWeightLabel.innerText = this.value;
-                resizeCanvas();
             };
             const cohesionWeightSlider = document.getElementById("cohesionWeight");
             const cohesionWeightLabel = document.getElementById("cohesionWeightLabel");
             cohesionWeightSlider.oninput = function () {
                 cohesionWeight = this.value;
                 cohesionWeightLabel.innerText = this.value;
-                resizeCanvas();
             };
             const separateWeightSlider = document.getElementById("separateWeight");
             const separateWeightLabel = document.getElementById("separateWeightLabel");
             separateWeightSlider.oninput = function () {
                 separateWeight = this.value;
                 separateWeightLabel.innerText = this.value;
-                resizeCanvas();
             };
             // Boids vision
             const showBoidsVisionCheckbox = document.getElementById("showBoidsVision");
             showBoidsVisionCheckbox.addEventListener("change", (event) => {
                 showBoidsVision = event.currentTarget.checked;
-                resizeCanvas();
             });
             const perceptionAngleSlider = document.getElementById("precepetionAngle");
             const perceptionAngleLabel = document.getElementById("precepetionAngleLabel");
             perceptionAngleSlider.oninput = function () {
                 perceptionAngle[0] = this.value * Math.PI / 180.0;
                 perceptionAngleLabel.innerText = this.value + "°";
-                resizeCanvas();
             };
             const detectionRadiusSlider = document.getElementById("detectionRadius");
             const detectionRadiusLabel = document.getElementById("detectionRadiusLabel");
             detectionRadiusSlider.oninput = function () {
                 visionRadius[0] = this.value;
                 detectionRadiusLabel.innerText = this.value;
-                resizeCanvas();
             };
             // canvas resize
             window.onresize = function () {
-                resizeCanvas();
+                const canvas = document.querySelector("#glCanvas");
+                const r = canvas.parentNode.getBoundingClientRect();
+                canvas.width = r.width;
+                viewport[0] = canvas.width;
+                canvas.height = r.height;
+                viewport[1] = canvas.height;
             };
         }
 
@@ -646,7 +628,7 @@
         #controlPannel {
             background-color: rgb(40, 40, 40);
             color: white;
-            width: fit-content;
+            width: 180px;
             flex-grow: 0;
             height: 100%;
         }
