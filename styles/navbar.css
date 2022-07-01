@@ -1,0 +1,33 @@
+html{
+    scroll-behavior: smooth;
+}
+
+#navbar {
+    background-color: rgb(17, 36, 54, 1);
+    width: 100%;
+    z-index: 100;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 50px;
+}
+
+#navbar li {
+    display: inline;
+    margin: 0;
+}
+#navbar ul {
+    padding-left: 10px;
+}
+
+#navbar a {
+    text-decoration: none;
+    color: rgb(17, 36, 54);
+    background-color: rgb(243, 245, 246);
+    padding: 5px 10px;
+    border-radius: 16px;
+}
+
+#navbar a:hover {
+    background-color: rgb(117, 210, 117);
+}

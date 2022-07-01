@@ -1,0 +1,754 @@
+<!-- 
+    AUTHOR: Pierre Jaffuer 
+    DATE: 17/05/2022
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boids</title>
+
+    <!---------------- WEBGL2 SHADERS ---------------->
+    <script id="boids-vertex-shader" type="x-shader/x-vertex">#version 300 es
+        layout(location = 0) in vec2 a_mesh_pos;
+        layout(location = 1) in vec3 a_color;
+        layout(location = 2) in vec2 a_view_pos;
+        layout(location = 3) in vec2 a_dir;
+        uniform vec2 viewport;
+        out vec3 color;
+        const float SIZE = 10.0;
+        void main(){
+            // scale geometry
+            float sx = a_mesh_pos.x * SIZE;
+            float sy = a_mesh_pos.y * SIZE;
+            // rotate geometry
+            float rx = sx * a_dir.x - sy * a_dir.y;
+            float ry = sx * a_dir.y + sy * a_dir.x;
+            // offset geometry in space 
+            float ox = rx + a_view_pos.x;
+            float oy = ry + a_view_pos.y;
+            // normalize geometry
+            float nx = 2.0*ox/viewport.x-1.0;
+            float ny = 1.0-2.0*oy/viewport.y;
+            gl_Position = vec4(nx, ny, 0.0, 1.0);
+            color = a_color;
+        }
+    </script>
+    <script id="boids-fragment-shader" type="x-shader/x-fragment">#version 300 es
+        precision mediump float;
+        in vec3 color;
+        out vec4 fragColor;
+        void main(){
+            fragColor = vec4(color, 1);
+        }
+    </script>
+
+    <script id="vision-vertex-shader" type="x-shader/x-vertex">#version 300 es
+        layout(location = 0) in vec2 a_mesh_pos;
+        layout(location = 1) in vec2 a_uv;
+        layout(location = 2) in vec2 a_view_pos;
+        layout(location = 3) in vec2 a_dir;
+        uniform vec2 viewport;
+        uniform float perceptionAngle;
+        uniform float radius;
+        uniform vec4 color;
+        out vec4 vscolor;
+        out float vsperceptionAngle;
+        out vec2 uv;
+        void main(){
+            // scale geometry
+            float sx = a_mesh_pos.x * radius;
+            float sy = a_mesh_pos.y * radius;
+            // rotate geometry
+            float rx = sx * a_dir.x - sy * a_dir.y;
+            float ry = sx * a_dir.y + sy * a_dir.x;
+            // offset geometry in space 
+            float ox = rx + a_view_pos.x;
+            float oy = ry + a_view_pos.y;
+            // normalize geometry
+            float nx = 2.0*ox/viewport.x-1.0;
+            float ny = 1.0-2.0*oy/viewport.y;
+            gl_Position = vec4(nx, ny, 0.0, 1.0);
+            vscolor = color;
+            vsperceptionAngle = perceptionAngle;
+            uv = a_uv;
+        }
+    </script>
+    <script id="vision-fragment-shader" type="x-shader/x-fragment">#version 300 es
+        precision mediump float;
+        out vec4 fragColor;
+        in vec4 vscolor;
+        in float vsperceptionAngle;
+        in vec2 uv;
+        void main(){
+            vec2 center = vec2(0.5, 0.5);
+            vec2 p = uv-center;
+            if(dot(p,p) > 0.25 || dot(normalize(p), vec2(1,0)) < cos(vsperceptionAngle))
+                discard;
+            fragColor = vscolor;
+        }
+    </script>
+
+
+
+    <!---------------- MAIN PROGRAM ---------------->
+    <script>
+        // ---------------- WEBGL2 HELPERS ----------------
+        function createShader(gl, type, source) {
+            var shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            var success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
+            if (success)
+                return shader;
+            console.log(gl.getShaderInfoLog(shader));
+            gl.deleteShader(shader);
+        }
+        function createProgram(gl, vertexShader, fragmentShader) {
+            var program = gl.createProgram();
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmentShader);
+            gl.linkProgram(program);
+            var success = gl.getProgramParameter(program, gl.LINK_STATUS);
+            if (success)
+                return program;
+            console.log(gl.getProgramInfoLog(program));
+            gl.deleteProgram(program);
+        }
+
+        // ---------------- MATH HELPERS ----------------
+        class vec2 {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+            }
+            add(other) {return new vec2(this.x + other.x, this.y + other.y);}
+            sub(other) {return new vec2(this.x - other.x, this.y - other.y);}
+            mult(s) {return new vec2(this.x * s, this.y * s);}
+            div(s) {return new vec2(this.x / s, this.y / s);}
+            dot(other) {return this.x * other.x + this.y * other.y;}
+            distancesq(other) {
+                var dir = other.sub(this);
+                return dir.magSq();
+            }
+            distance(other) {
+                var dir = other.sub(this);
+                return dir.mag();
+            }
+            mag() {return Math.sqrt(this.dot(this));}
+            magSq() {return this.dot(this);}
+            normalize() {
+                var d = this.mag();
+                return new vec2(this.x / d, this.y / d);
+            }
+            copy() {return new vec2(this.x, this.y)}
+            setMag(val) {return this.normalize().mult(val);}
+            clampMag(min, max) {
+                var mag = this.mag();
+                if (mag > max)
+                    mag = max;
+                else if (mag < min)
+                    mag = min;
+                return this.setMag(mag);
+            }
+        }
+        function randrange(min, max) {return min + Math.random() * (max - min);}
+
+        // ----------------- SIMULATION PARAM ---------------------------
+        const defaultMinSpeed = 10;
+        const defaultMaxSpeed = 300;
+        const defaultMaxSteerForce = 200;
+        const defaultAlignWeight = 1.0;
+        const defaultCohesionWeight = 0.5;
+        const defaultSeparateWeight = 1.0;
+        const defaultDetectionRadius = 96;
+        const defaultPerceptionAngle = 132;
+        const numBoids = 100;
+        const dt = 1.0 / 60.0;
+        // -------------------------------------------------------------
+
+        // ----------------------- GLOBAL VARIABLES --------------------
+        var boids = [];
+        var minSpeed = defaultMinSpeed;
+        var maxSpeed = defaultMaxSpeed;
+        var maxSteerForce = defaultMaxSteerForce;
+        var alignWeight = defaultAlignWeight;
+        var cohesionWeight = defaultCohesionWeight;
+        var separateWeight = defaultSeparateWeight;
+        var visionColor = new Float32Array([0.0, 1.0, 0.0, 0.05]);
+        var visionRadius = new Float32Array([defaultDetectionRadius]);
+        var perceptionAngle = new Float32Array([defaultPerceptionAngle * Math.PI / 180.0]);
+        var showBoidsVision = false;
+        var viewport = new Float32Array(2); // opengl canvas display
+
+        // ---------------------   BOIDS   ------------------------------- 
+        class Boid {
+            constructor(pos, dir) {
+                var startSpeed = (minSpeed + maxSpeed) / 2;
+                this.pos = pos;
+                this.dir = dir;
+                this.velocity = this.dir.mult(startSpeed);
+                // rules parametters
+                this.numFlockmate = 0;
+                this.centerOfFlockmate = new vec2(0, 0);
+                this.flockHeading = new vec2(0, 0);
+                this.avoidanceHeading = new vec2(0, 0);
+            }
+            reset() {
+                var startSpeed = (minSpeed + maxSpeed) / 2;
+                this.velocity = this.dir.mult(startSpeed);
+                // rules parametters
+                this.numFlockmate = 0;
+                this.centerOfFlockmate = new vec2(0, 0);
+                this.flockHeading = new vec2(0, 0);
+                this.avoidanceHeading = new vec2(0, 0);
+            }
+            isBoidVisible(boid, radius, perceptionAngle) {
+                var dd = boid.pos.sub(this.pos);
+                var dot = dd.normalize().dot(this.dir);
+                return dd.magSq() <= radius * radius && dot >= Math.cos(perceptionAngle)
+            }
+            updateBoidVelocity() {
+                var acceleration = new vec2(0, 0);
+                if (this.numFlockmate != 0) {
+                    var alignementForce = this.steerTowards(this.flockHeading.div(this.numFlockmate)).mult(alignWeight);
+                    var cohesionForce = this.steerTowards(this.centerOfFlockmate.div(this.numFlockmate).sub(this.pos)).mult(cohesionWeight);
+                    var separationForce = this.steerTowards(this.avoidanceHeading.div(this.numFlockmate)).mult(separateWeight);
+                    acceleration = acceleration.add(alignementForce).add(cohesionForce).add(separationForce);
+                }
+                this.velocity = this.velocity.add(acceleration.mult(dt)).clampMag(minSpeed, maxSpeed);
+                this.dir = this.velocity.normalize();
+                // reset parametters
+                this.numFlockmate = 0;
+                this.centerOfFlockmate = new vec2(0, 0);
+                this.flockHeading = new vec2(0, 0);
+                this.avoidanceHeading = new vec2(0, 0);
+            }
+            updateBoidPosition() {this.pos = this.pos.add(this.velocity.mult(dt));}
+            steerTowards(vector) {return vector.setMag(maxSpeed).sub(this.velocity).clampMag(0, maxSteerForce);}
+        }
+
+        // ----------------- SIMULATION METHODS ----------------
+
+        function resetSimulationParams(){
+            minSpeed = defaultMinSpeed;
+            maxSpeed = defaultMaxSpeed;
+            maxSteerForce = defaultMaxSteerForce;
+            alignWeight = defaultAlignWeight;
+            cohesionWeight = defaultCohesionWeight;
+            separateWeight = defaultSeparateWeight;
+            visionColor = new Float32Array([0.0, 1.0, 0.0, 0.05]);
+            visionRadius = new Float32Array([defaultDetectionRadius]);
+            perceptionAngle = new Float32Array([defaultPerceptionAngle * Math.PI / 180.0]);
+            showBoidsVision = false;
+        }
+        function replaceBoids() {
+            boids.forEach(b => {
+                let pos = new vec2(randrange(0, viewport[0]), randrange(0, viewport[1]));
+                let dir = (new vec2(randrange(-1, 1), randrange(-1, 1))).normalize();
+                b.pos = pos;
+                b.dir = dir;
+                b.reset();
+            });
+        }
+        function moveBoids() {
+            boids.forEach(b => {
+                b.updateBoidVelocity();
+                b.updateBoidPosition();
+            });
+        }
+        function warpWorld() {
+            boids.forEach(b => {
+                if (b.pos.x <= 0)
+                    b.pos.x = viewport[0];
+                else if (b.pos.x >= viewport[0])
+                    b.pos.x = 0;
+                if (b.pos.y <= 0)
+                    b.pos.y = viewport[1];
+                else if (b.pos.y >= viewport[1])
+                    b.pos.y = 0;
+            });
+        }
+        function boidsInterract() {
+            for (let i = 0; i < numBoids; i++) {
+                var b1 = boids[i];
+                for (let j = 0; j < numBoids; j++) {
+                    if (i == j)
+                        continue;
+                    var b2 = boids[j];
+
+                    if (b1.isBoidVisible(b2, visionRadius, perceptionAngle)) {
+                        b1.numFlockmate += 1;
+                        b1.flockHeading = b1.flockHeading.add(b2.dir);
+                        b1.centerOfFlockmate = b1.centerOfFlockmate.add(b2.pos);
+                        var offset = b1.pos.sub(b2.pos);
+                        b1.avoidanceHeading = b1.avoidanceHeading.add(offset.normalize());
+                    }
+                }
+            }
+        }
+
+        // main simulation procedure
+        function simulateBoids(){
+            boidsInterract();
+            moveBoids();
+            warpWorld();
+        }
+
+
+        // ------------------------ GUI --------------------------------
+        function resetGUI() {
+            // Boids movement
+            const minSpeedSlider = document.getElementById("minSpeed");
+            const minSpeedLabel = document.getElementById("minSpeedLabel");
+            minSpeedSlider.value = defaultMinSpeed;
+            minSpeedLabel.innerHTML = defaultMinSpeed;
+            const maxSpeedSlider = document.getElementById("maxSpeed");
+            const maxSpeedLabel = document.getElementById("maxSpeedLabel");
+            maxSpeedSlider.value = defaultMaxSpeed;
+            maxSpeedLabel.innerHTML = defaultMaxSpeed;
+            const maxSteerForceSlider = document.getElementById("maxSteerForce");
+            const maxSteerForceLabel = document.getElementById("maxSteerForceLabel");
+            maxSteerForceSlider.value = defaultMaxSteerForce;
+            maxSteerForceLabel.innerHTML = defaultMaxSteerForce;
+            // Boids rules
+            const alignWeightSlider = document.getElementById("alignWeight");
+            const alignWeightLabel = document.getElementById("alignWeightLabel");
+            alignWeightSlider.value = defaultAlignWeight;
+            alignWeightLabel.innerHTML = defaultAlignWeight;
+            const cohesionWeightSlider = document.getElementById("cohesionWeight");
+            const cohesionWeightLabel = document.getElementById("cohesionWeightLabel");
+            cohesionWeightSlider.value = defaultCohesionWeight;
+            cohesionWeightLabel.innerHTML = defaultCohesionWeight;
+            const separateWeightSlider = document.getElementById("separateWeight");
+            const separateWeightLabel = document.getElementById("separateWeightLabel");
+            separateWeightSlider.value = defaultSeparateWeight;
+            separateWeightLabel.innerHTML = defaultSeparateWeight;
+            // Boids vision
+            const showBoidsVisionCheckbox = document.getElementById("showBoidsVision");
+            showBoidsVisionCheckbox.checked = false;
+            const perceptionAngleSlider = document.getElementById("precepetionAngle");
+            const perceptionAngleLabel = document.getElementById("precepetionAngleLabel");
+            perceptionAngleSlider.value = defaultPerceptionAngle;
+            perceptionAngleLabel.innerText = defaultPerceptionAngle + "°";
+            const detectionRadiusSlider = document.getElementById("detectionRadius");
+            const detectionRadiusLabel = document.getElementById("detectionRadiusLabel");
+            detectionRadiusSlider.value = defaultDetectionRadius;
+            detectionRadiusLabel.innerText = defaultDetectionRadius;
+        }
+
+        function registerGUIEvents() {
+            // Simulation
+            const resetButton = document.getElementById("resetButton");
+            resetButton.onclick = function () { 
+                resetGUI(); 
+                resetSimulationParams(); 
+            };
+            const replaceButton = document.getElementById("replaceButton");
+            replaceButton.onclick = function () { replaceBoids(); resizeCanvas();};
+            // Boids movement
+            const minSpeedSlider = document.getElementById("minSpeed");
+            const minSpeedLabel = document.getElementById("minSpeedLabel");
+            minSpeedSlider.oninput = function () {
+                minSpeed = this.value;
+                minSpeedLabel.innerText = this.value;
+            };
+            const maxSpeedSlider = document.getElementById("maxSpeed");
+            const maxSpeedLabel = document.getElementById("maxSpeedLabel");
+            maxSpeedSlider.oninput = function () {
+                maxSpeed = this.value;
+                maxSpeedLabel.innerText = this.value;
+            };
+            const maxSteerForceSlider = document.getElementById("maxSteerForce");
+            const maxSteerForceLabel = document.getElementById("maxSteerForceLabel");
+            maxSteerForceSlider.oninput = function () {
+                maxSteerForce = this.value;
+                maxSteerForceLabel.innerText = this.value;
+            };
+            // Boids rules
+            const alignWeightSlider = document.getElementById("alignWeight");
+            const alignWeightLabel = document.getElementById("alignWeightLabel");
+            alignWeightSlider.oninput = function () {
+                alignWeight = this.value;
+                alignWeightLabel.innerText = this.value;
+            };
+            const cohesionWeightSlider = document.getElementById("cohesionWeight");
+            const cohesionWeightLabel = document.getElementById("cohesionWeightLabel");
+            cohesionWeightSlider.oninput = function () {
+                cohesionWeight = this.value;
+                cohesionWeightLabel.innerText = this.value;
+            };
+            const separateWeightSlider = document.getElementById("separateWeight");
+            const separateWeightLabel = document.getElementById("separateWeightLabel");
+            separateWeightSlider.oninput = function () {
+                separateWeight = this.value;
+                separateWeightLabel.innerText = this.value;
+            };
+            // Boids vision
+            const showBoidsVisionCheckbox = document.getElementById("showBoidsVision");
+            showBoidsVisionCheckbox.addEventListener("change", (event) => {
+                showBoidsVision = event.currentTarget.checked;
+            });
+            const perceptionAngleSlider = document.getElementById("precepetionAngle");
+            const perceptionAngleLabel = document.getElementById("precepetionAngleLabel");
+            perceptionAngleSlider.oninput = function () {
+                perceptionAngle[0] = this.value * Math.PI / 180.0;
+                perceptionAngleLabel.innerText = this.value + "°";
+            };
+            const detectionRadiusSlider = document.getElementById("detectionRadius");
+            const detectionRadiusLabel = document.getElementById("detectionRadiusLabel");
+            detectionRadiusSlider.oninput = function () {
+                visionRadius[0] = this.value;
+                detectionRadiusLabel.innerText = this.value;
+            };
+            // canvas resize
+            window.onresize = function () {
+                const canvas = document.querySelector("#glCanvas");
+                const r = canvas.parentNode.getBoundingClientRect();
+                canvas.width = r.width;
+                viewport[0] = canvas.width;
+                canvas.height = r.height;
+                viewport[1] = canvas.height;
+            };
+        }
+
+
+        // -------------------------- MAIN -----------------------------
+        function main() {
+            // setup canvas
+            const canvas = document.querySelector("#glCanvas");
+            const r = canvas.parentNode.getBoundingClientRect();
+            canvas.width = r.width;
+            canvas.height = r.height;
+            // setup gl context
+            const gl = canvas.getContext("webgl2");
+            if (!gl) {
+                alert("Can't initialize WebGL2.");
+                return;
+            }
+            // viewport size in pixels
+            viewport[0] = canvas.width;
+            viewport[1] = canvas.height;
+            // gl setup
+            gl.enable(gl.DEPTH_TEST);
+            gl.viewport(0, 0, viewport[0], viewport[1]);
+
+            // ------------- BOIDS -------------
+            // setup boids shader program
+            var vertexShaderSource = document.querySelector("#boids-vertex-shader").text;
+            var fragmentShaderSource = document.querySelector("#boids-fragment-shader").text;
+            var vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+            var fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+            var program = createProgram(gl, vertexShader, fragmentShader);
+            var viewportUniformLoc = gl.getUniformLocation(program, "viewport"); // viewport uniform
+
+            // boids geometry (triangle)
+            var boidsGeometry = [1, 0, -0.5, -Math.sqrt(3.0) / 4.0, -0.5, Math.sqrt(3.0) / 4.0];
+
+            // setup boids buffers
+            var boidsVAO = gl.createVertexArray();
+            gl.bindVertexArray(boidsVAO);
+            var boidsVBO = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, boidsVBO);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(boidsGeometry), gl.STATIC_DRAW);
+            // mesh vertices
+            gl.enableVertexAttribArray(0);
+            gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+            // setup boids intances data
+            const colorData = new Float32Array(numBoids * 3); // static
+            const posData = new Float32Array(numBoids * 2);   // dynamic
+            const dirData = new Float32Array(numBoids * 2);       // dynamic 
+
+            // creating boids and fill instances data
+            for (let i = 0; i < numBoids; i++) {
+                // create boid
+                let pos = new vec2(randrange(0, viewport[0]), randrange(0, viewport[1]));
+                let dir = (new vec2(randrange(-1, 1), randrange(-1, 1))).normalize();
+                boids.push(new Boid(pos, dir));
+                // fill static data
+                colorData[i * 3] = Math.random();
+                colorData[i * 3 + 1] = Math.random();
+                colorData[i * 3 + 2] = Math.random();
+            }
+
+            // create static instances buffers (colors)
+            const colorBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, colorData, gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(1);
+            gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0); // 0,0 -> tightly packed array
+            gl.vertexAttribDivisor(1, 1);
+
+            // create dynamic instances buffer
+            const posBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, posData.byteLength, gl.DYNAMIC_DRAW); // just allocate the buffer
+            gl.enableVertexAttribArray(2);
+            gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
+            gl.vertexAttribDivisor(2, 1);
+
+            const dirBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, dirBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, dirData.byteLength, gl.DYNAMIC_DRAW); // just allocate the buffer
+            gl.enableVertexAttribArray(3);
+            gl.vertexAttribPointer(3, 2, gl.FLOAT, false, 0, 0);
+            gl.vertexAttribDivisor(3, 1);
+
+            // ------------- BOIDS VISION -------------
+
+            // setup perception shader program
+            var vertexShaderSourceVision = document.querySelector("#vision-vertex-shader").text;
+            var fragmentShaderSourceVision = document.querySelector("#vision-fragment-shader").text;
+            var vertexShaderVision = createShader(gl, gl.VERTEX_SHADER, vertexShaderSourceVision);
+            var fragmentShaderVision = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSourceVision);
+            var programVision = createProgram(gl, vertexShaderVision, fragmentShaderVision);
+            // uniforms
+            var viewportUniformLocVision = gl.getUniformLocation(programVision, "viewport");
+            var radiusUniformLocVision = gl.getUniformLocation(programVision, "radius");
+            var perceptionAngleUniformLocVision = gl.getUniformLocation(programVision, "perceptionAngle");
+            var colorUniformLocVision = gl.getUniformLocation(programVision, "color");
+
+            var quad = [
+                //pos  //uv
+                -1, 1, 0, 1,
+                1, 1, 1, 1,
+                1, -1, 1, 0,
+                1, -1, 1, 0,
+                -1, -1, 0, 0,
+                -1, 1, 0, 1
+            ];
+
+            var quadVAO = gl.createVertexArray();
+            gl.bindVertexArray(quadVAO);
+
+            var quadVBO = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, quadVBO);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(quad), gl.STATIC_DRAW);
+            // mesh vertices
+            gl.enableVertexAttribArray(0);
+            gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 4 * Float32Array.BYTES_PER_ELEMENT, 0);
+            // uv
+            gl.enableVertexAttribArray(1);
+            gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 4 * Float32Array.BYTES_PER_ELEMENT, 2 * Float32Array.BYTES_PER_ELEMENT);
+            // pos
+            gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+            gl.enableVertexAttribArray(2);
+            gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
+            gl.vertexAttribDivisor(2, 1);
+            //dir
+            gl.bindBuffer(gl.ARRAY_BUFFER, dirBuffer);
+            gl.enableVertexAttribArray(3);
+            gl.vertexAttribPointer(3, 2, gl.FLOAT, false, 0, 0);
+            gl.vertexAttribDivisor(3, 1);
+
+            var renderBoids = () => {
+                // fill pos and rotation data
+                for (let i = 0; i < numBoids; i++) {
+                    let b = boids[i];
+                    posData[i * 2] = b.pos.x;
+                    posData[i * 2 + 1] = b.pos.y;
+                    dirData[i * 2] = b.dir.x;
+                    dirData[i * 2 + 1] = b.dir.y;
+                }
+
+                // set posBuffer
+                gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+                gl.bufferSubData(gl.ARRAY_BUFFER, 0, posData);
+                // set rotBuffer
+                gl.bindBuffer(gl.ARRAY_BUFFER, dirBuffer);
+                gl.bufferSubData(gl.ARRAY_BUFFER, 0, dirData);
+
+                //render boids vision
+                if (showBoidsVision) {
+                    gl.disable(gl.DEPTH_TEST);
+                    gl.enable(gl.BLEND);
+                    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+                    gl.useProgram(programVision);
+                    gl.uniform2fv(viewportUniformLocVision, viewport);
+                    gl.uniform1fv(radiusUniformLocVision, visionRadius);
+                    gl.uniform1fv(perceptionAngleUniformLocVision, perceptionAngle);
+                    gl.uniform4fv(colorUniformLocVision, visionColor);
+                    gl.bindVertexArray(quadVAO);
+                    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, numBoids);
+                    gl.disable(gl.BLEND);
+                    gl.enable(gl.DEPTH_TEST);
+                }
+
+                // render boids
+                gl.useProgram(program);
+                gl.uniform2fv(viewportUniformLoc, viewport);
+                gl.bindVertexArray(boidsVAO);
+                gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, numBoids);
+            };
+
+            // ----- EVENT, GUI & SIMULATION INITIAL STATES -----
+            resetSimulationParams();
+            resetGUI();
+            registerGUIEvents();
+            // ------------ MAIN LOOP ------------------
+            var loop = () => {
+                // SIMULATING
+                simulateBoids();
+                // DRAWING
+                gl.viewport(0, 0, viewport[0], viewport[1]);
+                gl.clearColor(0.1, 0.1, 0.1, 1);
+                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_COLOR_BIT);
+                renderBoids();
+                // loop
+                requestAnimationFrame(loop);
+            };
+            requestAnimationFrame(loop);
+        }
+    </script>
+
+    <style>
+        #simulation {
+            position: absolute;
+            top: 0;
+            left: 0;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: row;
+            width: 100%;
+            height: 100%;
+        }
+        #canvasContainer {
+            position: relative;
+            top: 0;
+            left: 0;
+            margin: 0;
+            padding: 0;
+            flex-grow: 1;
+            background-color: black;
+            height: 100%;
+        }
+        #controlPannel {
+            background-color: rgb(40, 40, 40);
+            color: white;
+            width: 180px;
+            flex-grow: 0;
+            height: 100%;
+        }
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            margin: 0;
+            padding: 0;
+        }
+        .controlTitle {
+            background-color: rgb(50, 50, 50);
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+        .controlBox {
+            border: 1px solid rgb(60, 60, 60);
+            border-radius: 8px;
+            margin-left: 4px;
+            margin-right: 4px;
+            margin-bottom: 4px;
+            padding: 4px;
+        }
+        .centerButton {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        button {width: 100%;}
+        body {background-color: rgb(40, 40, 40);}
+    </style>
+
+</head>
+
+<body onload="main()">
+    <div id="simulation">
+        <div id="canvasContainer">
+            <canvas id="glCanvas"></canvas>
+        </div>
+        <div id="controlPannel">
+            <div class="controlTitle">Simulation</div>
+            <div class="controlBox">
+                <div class="centerButton">
+                    <button id="replaceButton">Replace boids</button>
+                </div>
+            </div>
+            <div class="controlBox">
+                <div class="centerButton">
+                    <button id="resetButton">Reset parameters</button>
+                </div>
+            </div>
+            <div class="controlTitle">Boids movement</div>
+            <div class="controlBox">
+                <label for="minSpeed">Min speed: </label><label id="minSpeedLabel">10</label> <br>
+                <input id="minSpeed" type="range" min="0" max="512" value="10"> <br>
+            </div>
+            <div class="controlBox">
+                <label for="maxSpeed">Max speed: </label><label id="maxSpeedLabel">300</label> <br>
+                <input id="maxSpeed" type="range" min="0" max="512" value="300"> <br>
+            </div>
+            <div class="controlBox">
+                <label for="maxSteerForce">Max Steer Force: </label><label id="maxSteerForceLabel">200</label> <br>
+                <input id="maxSteerForce" type="range" min="0" max="512" value="200"> <br>
+            </div>
+            <div class="controlTitle">Boids rules</div>
+            <div class="controlBox">
+                <label for="alignWeight">Alignement weight: </label><label id="alignWeightLabel">1</label> <br>
+                <input id="alignWeight" type="range" min="0" max="2" value="1" step="0.01"> <br>
+            </div>
+            <div class="controlBox">
+                <label for="cohesionWeight">Cohesion Weight: </label><label id="cohesionWeightLabel">0.5</label> <br>
+                <input id="cohesionWeight" type="range" min="0" max="2" value="0.5" step="0.01"> <br>
+            </div>
+            <div class="controlBox">
+                <label for="separateWeight">Separation Weight: </label><label id="separateWeightLabel">1</label> <br>
+                <input id="separateWeight" type="range" min="0" max="2" value="1" step="0.01"> <br>
+            </div>
+            <div class="controlTitle">Boids vision</div>
+            <div class="controlBox">
+                <input id="showBoidsVision" type="checkbox"><label for="showBoidsVision">Show boids vision</label> <br>
+            </div>
+            <div class="controlBox">
+                <label for="perceptionAngle">Perception angle: </label><label id="precepetionAngleLabel">132°</label>
+                <br>
+                <input id="precepetionAngle" type="range" min="0" max="180" value="132"> <br>
+            </div>
+            <div class="controlBox">
+                <label for="detectionRadius">Detection radius: </label><label id="detectionRadiusLabel">96</label> <br>
+                <input id="detectionRadius" type="range" min="0" max="512" value="96"> <br>
+            </div>
+        </div>
+    </div>
+    <div id="about">
+
+    </div>
+</body>
+</html>
+<!--
+    MIT License
+
+    Copyright (c) 2022 Pierre Jaffuer
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+-->
