@@ -451,8 +451,8 @@ function main() {
             oldMouse = mouse.copy();
         }
 
-        tree.update();
         world.update();
+        tree.update();
 
         if (birdImageReady) {
             birds.update(dt);
