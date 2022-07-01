@@ -447,7 +447,8 @@ function main() {
     const loop = () => {
         if (mouse.x != oldMouse.x || mouse.y != mouse.y) {
             tree.displaceMouse(mouse);
-            birds.displaceMouse(mouse);
+            if(birdImageReady)
+                birds.displaceMouse(mouse);
             oldMouse = mouse.copy();
         }
 
