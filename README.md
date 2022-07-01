@@ -1,5 +1,5 @@
 # smallcluster.github.io
 
-My github page were I host web projects (maybe a portfolio in the future), for now there is only a verlet particle simulation using webgl 2.
+Repository for my portfolio and some web experiments.
 
 Check it out on https://smallcluster.github.io/
