@@ -105,7 +105,6 @@ body {
 /* sections */
 
 .section {
-    padding-top: 50px;
     max-width: 100%;
     width: 100%;
     text-align: center;
@@ -114,4 +113,43 @@ body {
 .construction {
     position: relative;
     width: 100%;
+}
+
+/* contact */
+
+.contact-list {
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+    margin: 50px;
+    width: min(1080px, 100%);
+    left: 0;
+    right: 0;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.contact-entry {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+.contact-img {
+    width: 100px;
+    height: 100px;
+    margin: 10px;
+    border-radius: 50%;
+    box-shadow: 0px 0px 10px rgba(0,0,0,0.25);
+    background-color: white;
+    transition-duration: 0.3s;
+}
+
+.contact-img:hover{
+    background-color: rgb(127, 231, 127);
+}
+
+.contact-label {
+    font-weight: bold;
 }
