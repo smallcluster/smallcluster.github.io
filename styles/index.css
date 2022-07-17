@@ -49,13 +49,14 @@ body {
 .about-text{
     text-align: left;
     max-width: 512px;
-    font-size: large;
+    font-size: larger;
 }
 
 #canvas-flag{
     background-color: blue;
 }
 
+/* contact */
 .contact-list {
     display: flex;
     justify-content: space-around;
@@ -67,14 +68,12 @@ body {
     margin-left: auto;
     margin-right: auto;
 }
-
 .contact-entry {
     display: flex;
     justify-content: center;
     align-items: center;
     flex-direction: column;
 }
-
 .contact-img {
     width: 100px;
     height: 100px;
@@ -84,11 +83,74 @@ body {
     background-color: white;
     transition-duration: 0.3s;
 }
-
 .contact-img:hover{
     background-color: rgb(117, 210, 117);
+    box-shadow: 0px 0px 25px rgba(0,0,0,0.5);
 }
-
 .contact-label {
     font-weight: bold;
+}
+
+/* LAB */
+.lab-grid{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
+    gap: 4px;
+    left: 0;
+    right: 0;
+}
+.lab-entry{
+    overflow: hidden;
+    max-width: 196px;
+    min-width: 196px;
+    height: 256px;
+    background-color: black;
+    position: relative;
+    text-align: center;
+    border-radius: 16px 16px 16px 16px;
+    box-shadow: 0px 0px 10px rgba(0,0,0,0.5);
+    transition-duration: 0.4s;
+    cursor: pointer;
+    justify-self: center;
+    text-decoration: none;
+    color: rgb(17, 36, 54);
+}
+.lab-entry-image{
+    width: 100%;
+    background-color: blueviolet;
+    border-radius: 16px 16px 0 0;
+    opacity: 1;
+    transition-duration: 0.2s;
+}
+.lab-entry-description{
+    position: absolute;
+    top: 100%;
+    background-color: rgb(243, 245, 246);
+    height: 50%;
+    opacity: 0;
+    transition-duration: 0.3s;
+    padding: 5px;
+}
+.lab-entry:hover .lab-entry-description{
+    top: 30%;
+    opacity: 1;
+}
+.lab-entry:hover .lab-entry-image{
+    opacity: 0.5;
+}
+.lab-entry:hover{
+    box-shadow: 0px 0px 25px rgba(0,0,0,0.5);
+}
+.lab-entry-footer{
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 20%;
+    color: rgb(243, 245, 246);;
+    background-color: rgb(17, 36, 54);
+    border-radius: 0 0 16px 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
