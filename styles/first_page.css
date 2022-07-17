@@ -25,20 +25,20 @@
 #me {
     position: relative;
     background-color: rgb(238, 205, 57);
-    padding: 32px;
+    padding: min(3vw, 3vh);
     border-radius: 50%;
     width: min(28vw, 28vh);
     box-shadow: 0px 0px 150px rgb(255, 213, 0);
     cursor: pointer;
 }
 #hitext {
-    font-size: 10vmin;
+    font-size: 72px;
     transform: rotate(10deg);
     margin-right: 5vmin;
     z-index: 2;
 }
 #name {
-    font-size: 5vmin;
+    font-size: 46px;
     text-align: center;
     z-index: 2;
 }

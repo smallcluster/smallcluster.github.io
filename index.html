@@ -10,6 +10,7 @@
     <link href="styles/index.css" rel="stylesheet">
 
     <script type="module" src="scripts/index.js"></script>
+    <script type="module" src="scripts/lab_bg.js"></script>
 </head>
 
 <body>
@@ -17,10 +18,10 @@
     <div id="navbar">
         <ul>
             <li><a href="#about">About</a></li>
-            <li><a href="cv.pdf">CV</a></li>
+            <li><a href="./cv.pdf">CV</a></li>
             <li><a href="#contact">Contact</a></li>
             <li><a href="#work">My work</a></li>
-            <li><a href="#contact">LAB</a></li>
+            <li><a href="#LAB">LAB</a></li>
         </ul>
     </div>
 
@@ -40,7 +41,6 @@
         <h1 >About</h1>
 
         <div class="about-container">
-            <img src="images/under_construction.svg" class="construction" />
             <div class="about-text">
                 Hi ! I'm JAFFUER Pierre, a 23 year old computer science student at Réunion island's University.
             </div>
@@ -50,34 +50,35 @@
 
     <div class="section" id="work">
         <h1>My work</h1>
-        <img src="images/under_construction.svg" class="construction" />
     </div>
     
     <div class="section" id="LAB">
+        <canvas id="canvas-lab"></canvas>
+        <img class="lab-sep" src="images/lab_sep.svg">
         <h1>LAB</h1>
-
-        <adiv class="lab-grid" >
+        <p class="lab-text">Here lies my interactive web experiments. They may tackle anything I find interesting, like rendering techniques or simulations! Most of them are written in vanilla JS.</p>
+        <div class="lab-grid" >
             <a class="lab-entry" href="./LAB/boids.html">
                 <img class="lab-entry-image" src="images/LAB/boids.png"></img>
-                <div class="lab-entry-description">A boids simulation in vanilla JS, rendered with WebGL2.0.</div>
+                <div class="lab-entry-description">A boids simulation in vanilla JS, render with WebGL2.</div>
                 <div class="lab-entry-footer">
                     <span>BOIDS</span>
                 </div>
             </a>
             <a class="lab-entry" href="./LAB/balls.html">
                 <img class="lab-entry-image" src="./images/LAB/balls.png"></img>
-                <div class="lab-entry-description">A postition verlet simulation in vanilla JS, rendered with WebGL2.0.</div>
+                <div class="lab-entry-description">A postition verlet simulation in vanilla JS, render with WebGL2.</div>
                 <div class="lab-entry-footer">
                     <span>BALLS</span>
                 </div>
             </a>
         </div>
+        <img class="lab-sep" src="images/lab_sep.svg">
     </div>
-
+    
     <div class="section" id="contact">
         <h1 >Contact me</h1>
         <div class="contact-list">
-
             <div class="contact-entry">
                 <a href="./cv.pdf"><img src="images/cv.svg" class="contact-img"/></a>
                 <div class="contact-label">CV</div>
@@ -85,9 +86,8 @@
 
             <div class="contact-entry">
                 <a href="mailto: p.jaffuer@free.fr"><img src="images/email.svg" class="contact-img"/></a>
-                <div class="contact-label">p.jaffuer@free.fr</div>
+                <div class="contact-label">P.JAFFUER@FREE.FR</div>
             </div>
-    
             <div class="contact-entry">
                 <a href="https://github.com/smallcluster"><img src="images/github.svg" class="contact-img"/></a>
                 <div class="contact-label">GITHUB</div>

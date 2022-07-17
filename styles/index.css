@@ -4,7 +4,8 @@ body {
     margin: 0;
     padding: 0;
     border-width: 0px;
-    font-family: 'Malgun Gothic';
+    font-family: 'Arial', 'Malgun Gothic';
+    font-size: larger;
 }
 
 .page {
@@ -23,9 +24,10 @@ body {
 /* sections */
 
 .section {
+    position: relative;
     max-width: 100%;
     width: min(1080px, 100%);
-    padding-top: 50px;
+    margin-top: 50px;
     text-align: center;
     left: 0;
     right: 0;
@@ -49,11 +51,12 @@ body {
 .about-text{
     text-align: left;
     max-width: 512px;
-    font-size: larger;
 }
 
 #canvas-flag{
     background-color: blue;
+    max-width: 256px;
+    width: 100%;
 }
 
 /* contact */
@@ -92,12 +95,34 @@ body {
 }
 
 /* LAB */
+
+#canvas-lab{
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+}
+
+.lab-sep{
+    width:100%;
+    height:32px;
+    vertical-align: top;
+}
+
+.lab-text{
+    backdrop-filter: blur(5px);
+}
+
 .lab-grid{
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
     gap: 4px;
     left: 0;
     right: 0;
+    margin-bottom: 32px;
+    margin-top: 32px;
 }
 .lab-entry{
     overflow: hidden;
@@ -153,4 +178,5 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: center;
+    font-weight: bold;
 }

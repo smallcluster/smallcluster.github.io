@@ -10,6 +10,7 @@ html{
     top: 0;
     left: 0;
     height: 50px;
+    font-size: medium;
 }
 
 #navbar li {
