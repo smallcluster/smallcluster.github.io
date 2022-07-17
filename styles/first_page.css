@@ -14,7 +14,7 @@
     margin-right: 64px;
     flex-direction: row;
     width: 100%;
-    text-shadow: -1px 0px 0px rgb(243, 245, 246), 1px 0px 0px rgb(243, 245, 246), 0px -1px 0px rgb(243, 245, 246), 0px 1px 0px rgb(243, 245, 246);
+    font-weight: bold;
 }
 #infome {
     display: flex;

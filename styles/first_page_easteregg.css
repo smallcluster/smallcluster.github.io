@@ -15,6 +15,7 @@
     margin-right: 64px;
     flex-direction: row;
     width: 100%;
+    font-weight: bold;
 }
 #infome {
     display: flex;
