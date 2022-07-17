@@ -408,12 +408,12 @@ function main() {
         let ground = document.getElementById("ground");
 
         if(debug){
-            theme.setAttribute('href', 'styles/index_easteregg.css');
+            theme.setAttribute('href', 'styles/first_page_easteregg.css');
             me.src = "images/moi_easteregg.png";
             ground.src = "images/ground_easteregg.svg";
             
         } else {
-            theme.setAttribute('href', 'styles/index.css');
+            theme.setAttribute('href', 'styles/first_page.css');
             me.src = "images/moi.png";
             ground.src = "images/ground.svg";
         }

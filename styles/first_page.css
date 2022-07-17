@@ -1,0 +1,82 @@
+/* FIRST PAGE */
+#pagedegarde{
+    background-color: rgb(189, 234, 247);
+    overflow: hidden;
+}
+
+/* image and text */
+#hidiv {
+    position: absolute;
+    right: 0;
+    top: 96px;
+    display: flex;
+    justify-content: end;
+    margin-right: 64px;
+    flex-direction: row;
+    width: 100%;
+    text-shadow: -1px 0px 0px rgb(243, 245, 246), 1px 0px 0px rgb(243, 245, 246), 0px -1px 0px rgb(243, 245, 246), 0px 1px 0px rgb(243, 245, 246);
+}
+#infome {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+#me {
+    position: relative;
+    background-color: rgb(238, 205, 57);
+    padding: 32px;
+    border-radius: 50%;
+    width: min(28vw, 28vh);
+    box-shadow: 0px 0px 150px rgb(255, 213, 0);
+    cursor: pointer;
+}
+#hitext {
+    font-size: 10vmin;
+    transform: rotate(10deg);
+    margin-right: 5vmin;
+    z-index: 2;
+}
+#name {
+    font-size: 5vmin;
+    text-align: center;
+    z-index: 2;
+}
+@supports (display: flex) {
+    @media screen and (max-width: 695px) {
+        #hidiv {
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            left:0;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        #hitext {
+            margin-right: 0;
+        }
+        
+    }
+}
+
+
+/* drawing */
+#ground {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: min(100%, 850px);
+    right: 0;
+    margin-left: auto;
+    margin-right: auto;
+    filter: drop-shadow(-5px -5px 10px rgba(0,0,0,0.4));
+}
+
+#tree_canvas {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height : 100%;
+    filter : drop-shadow(-10px 10px 5px rgba(0,0,0,0.2)) drop-shadow(-20px 20px 5px rgba(0,0,0,0.2)) drop-shadow(-30px 30px 5px rgba(0,0,0,0.2)) drop-shadow(-40px 40px 5px rgba(0,0,0,0.2));
+}

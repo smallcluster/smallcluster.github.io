@@ -6,7 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JAFFUER Pierre</title>
     <link href="styles/navbar.css" rel="stylesheet">
-    <link id="theme" href="styles/index.css" rel="stylesheet">
+    <link id="theme" href="styles/first_page.css" rel="stylesheet">
+    <link href="styles/index.css" rel="stylesheet">
 
     <script type="module" src="scripts/index.js"></script>
 </head>
@@ -37,7 +38,13 @@
 
     <div class="section" id="about">
         <h1 >About</h1>
-        <img src="images/under_construction.svg" class="construction" />
+
+        <div class="about-container">
+            <div class="about-text">
+                Hi ! I'm JAFFUER Pierre, a computer science student at Réunion island's University.
+            </div>
+            <canvas id="canvas-flag" width="256" height="256"></canvas>
+        </div>
     </div>
 
     <div class="section" id="work">
@@ -54,7 +61,7 @@
         <h1 >Contact</h1>
         <div class="contact-list">
             <div class="contact-entry">
-                <img src="images/email.svg" class="contact-img"/>
+                <a href="mailto: p.jaffuer@free.fr"><img src="images/email.svg" class="contact-img"/></a>
                 <div class="contact-label">p.jaffuer@free.fr</div>
             </div>
     
